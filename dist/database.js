@@ -26,9 +26,9 @@ const db = new sqlite3_1.default.Database(':memory:', (err) => __awaiter(void 0,
                 console.error('Error creating users table:', err);
             }
             else {
-                const defaultPin = yield (0, auth_1.hashPassword)('1234'); // Hash the default pin
+                const defaultPin = yield (0, auth_1.hashPassword)('1234');
                 const user1Password = yield (0, auth_1.hashPassword)('password123');
-                const user2Password = yield (0, auth_1.hashPassword)('securePassword456');
+                const user2Password = yield (0, auth_1.hashPassword)('password123');
                 db.run("INSERT OR IGNORE INTO users (username, password, pin) VALUES (?, ?, ?)", ['user1', user1Password, defaultPin]);
                 db.run("INSERT OR IGNORE INTO users (username, password, pin) VALUES (?, ?, ?)", ['user2', user2Password, defaultPin]);
             }
@@ -74,15 +74,33 @@ const getBalance = (username) => {
 exports.getBalance = getBalance;
 const updateBalance = (username, amount) => {
     return new Promise((resolve, reject) => {
-        db.run("UPDATE wallets SET balance = balance + ? WHERE username = ?", [amount, username], (err) => {
-            if (err) {
-                console.error('Error updating balance:', err);
-                reject(err);
+        db.run("BEGIN TRANSACTION", (beginErr) => __awaiter(void 0, void 0, void 0, function* () {
+            if (beginErr) {
+                console.error('Error beginning transaction:', beginErr);
+                reject(beginErr);
+                return;
             }
-            else {
-                resolve();
+            try {
+                if (!username || typeof amount !== 'number' || isNaN(amount)) {
+                    throw new Error('Invalid username or amount');
+                }
+                yield db.run("UPDATE wallets SET balance = balance + ? WHERE username = ?", [amount, username]);
+                yield db.run("COMMIT", (commitErr) => {
+                    if (commitErr) {
+                        console.error('Error committing transaction:', commitErr);
+                        reject(commitErr);
+                    }
+                    else {
+                        resolve();
+                    }
+                });
             }
-        });
+            catch (error) {
+                yield db.run("ROLLBACK");
+                console.error('Error updating balance:', error);
+                reject(error);
+            }
+        }));
     });
 };
 exports.updateBalance = updateBalance;
