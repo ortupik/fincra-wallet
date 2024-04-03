@@ -1,0 +1,12 @@
+{
+    "compilerOptions": {
+      "target": "es6",
+      "module": "commonjs",
+      "outDir": "./dist",
+      "types": ["sqlite3"],
+      "strict": false,
+      "esModuleInterop": true 
+    },
+    "include": ["src/**/*"]
+  }
+  
