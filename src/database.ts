@@ -84,49 +84,68 @@ export const updateBalance = (username: string, amount: number): Promise<void> =
 export const processDebitCreditTransaction = async (
     username: string,
     amount: number,
-    transactionType: string
+    transactionType: string,
+    retries: number = 3
 ): Promise<void> => {
-    try {
-        await db.run("BEGIN TRANSACTION");
+    let retryCount = 0;
+    while (retryCount < retries) {
+        try {
+            await db.run("BEGIN TRANSACTION");
 
-        await updateBalance(username, amount);
+            await updateBalance(username, amount);
 
-        await db.run("INSERT INTO transactions_debit_credit (username, amount, transaction_type) VALUES (?, ?, ?)", [username, amount, transactionType]);
+            await db.run("INSERT INTO transactions_debit_credit (username, amount, transaction_type) VALUES (?, ?, ?)", [username, amount, transactionType]);
 
-        await db.run("COMMIT");
-    } catch (error) {
-        await db.run("ROLLBACK");
-        console.error('Error processing debit/credit transaction:', error);
-        throw error;
+            await db.run("COMMIT");
+            return;
+        } catch (error) {
+            await db.run("ROLLBACK");
+            if (error.message.includes('SQLITE_BUSY')) {
+                retryCount++;
+                continue;
+            } else {
+                throw error;
+            }
+        }
     }
+    throw new Error(`Failed to process debit/credit transaction after ${retries} retries.`);
 };
 
 export const transferFunds = async (
     sender: string,
     receiver: string,
-    amount: number
+    amount: number,
+    retries: number = 3
 ): Promise<void> => {
-    try {
-        await db.run("BEGIN IMMEDIATE");
-        const senderBalance = await getBalance(sender);
-        
-        if (senderBalance < amount) {
-            throw new Error('Insufficient balance');
+    let retryCount = 0;
+    while (retryCount < retries) {
+        try {
+            await db.run("BEGIN IMMEDIATE");
+            const senderBalance = await getBalance(sender);
+            
+            if (senderBalance < amount) {
+                throw new Error('Insufficient balance');
+            }
+            
+            await updateBalance(sender, -amount); 
+            await updateBalance(receiver, amount); 
+            
+            db.run("INSERT INTO transactions_transfer (sender, receiver, amount) VALUES (?, ?, ?)", [sender, receiver, amount]);
+           
+            await db.run("COMMIT");
+            return;
+        } catch (error) {
+            await db.run("ROLLBACK"); 
+            if (error.message.includes('SQLITE_BUSY')) {
+                retryCount++;
+                continue;
+            } else {
+                throw error;
+            }
         }
-        
-        await updateBalance(sender, -amount); 
-        await updateBalance(receiver, amount); 
-          
-        db.run("INSERT INTO transactions_transfer (sender, receiver, amount) VALUES (?, ?, ?)", [sender, receiver, amount]);
-       
-        console.log(`Transaction recorded: ${sender} transferred ${amount} to ${receiver}`);
-
-        await db.run("COMMIT"); 
-    } catch (error) {
-        await db.run("ROLLBACK"); 
-        console.error('Error transferring funds:', error);
-        throw error;
     }
+    throw new Error(`Failed to transfer funds after ${retries} retries.`);
 };
+
 
 export default db;

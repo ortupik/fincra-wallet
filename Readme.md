@@ -1,4 +1,6 @@
 
+---
+
 # FinCra Wallet
 
 Welcome to FinCra Wallet! This application allows users to manage their virtual wallets, perform transactions, and check their balances.
@@ -11,6 +13,7 @@ Welcome to FinCra Wallet! This application allows users to manage their virtual 
 - [Usage](#usage)
 - [API Endpoints](#api-endpoints)
 - [Technical Decisions](#technical-decisions)
+- [Database Decisions](#database-decisions)
 - [Contributing](#contributing)
 - [License](#license)
 
@@ -19,6 +22,7 @@ Welcome to FinCra Wallet! This application allows users to manage their virtual 
 - **User Authentication:** Users can log in and log out of their accounts securely.
 - **Wallet Management:** Users can view their wallet balances, credit funds, debit funds, and transfer funds to other users.
 - **Secure Transactions:** Passwords are hashed for security, and transactions are performed within database transactions for data integrity.
+- **Deadlock Prevention:** Deadlocks in database transactions are prevented by implementing a retry mechanism that automatically retries the transaction in case of a deadlock error.
 
 ## Prerequisites
 
@@ -94,15 +98,19 @@ Express.js was chosen as the web framework for handling HTTP requests and routin
 
 SQLite was chosen as the database for storing user information and wallet balances. SQLite is a lightweight, file-based database that is easy to set up and does not require a separate server process. It provides sufficient performance for small to medium-sized applications and is well-suited for prototyping and development purposes.
 
-### 4. Bcrypt.js
+## Database Decisions
 
-Bcrypt.js was chosen as the library for hashing passwords before storing them in the database. Bcrypt.js provides secure password hashing with a customizable cost factor, making it resistant to brute-force attacks. By securely hashing passwords, the FinCra Wallet application ensures the confidentiality of user credentials and protects against unauthorized access.
+### Transactions
 
-### 5. Session Management
+All financial transactions are performed within database transactions to ensure data integrity. This ensures that operations like crediting, debiting, and transferring funds are atomic and consistent, even in the face of concurrent access.
 
-Express.js session management middleware was used to manage user sessions and authenticate requests. Sessions are stored in memory by default but can be configured to use external stores like Redis for scalability. By maintaining user sessions, the FinCra Wallet application can keep track of authenticated users and restrict access to certain endpoints based on authentication status.
+### Locking
 
-These technical decisions were made to ensure the security, performance, and maintainability of the FinCra Wallet application while providing a seamless user experience.
+Pessimistic locking is used in transfer scenarios to prevent race conditions. Briefly locking the sender's balance row before reading it guarantees that another transaction hasn't modified it concurrently. This avoids situations where two transfers might succeed despite insufficient funds due to concurrent access.
+
+### Deadlock Prevention
+
+Deadlocks in database transactions are prevented by implementing a retry mechanism that automatically retries the transaction in case of a deadlock error. This ensures that transactions are eventually executed successfully without causing deadlock-related issues.
 
 ## Contributing
 
