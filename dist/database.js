@@ -96,38 +96,57 @@ const updateBalance = (username, amount) => {
     });
 };
 exports.updateBalance = updateBalance;
-const processDebitCreditTransaction = (username, amount, transactionType) => __awaiter(void 0, void 0, void 0, function* () {
-    try {
-        yield db.run("BEGIN TRANSACTION");
-        yield (0, exports.updateBalance)(username, amount);
-        yield db.run("INSERT INTO transactions_debit_credit (username, amount, transaction_type) VALUES (?, ?, ?)", [username, amount, transactionType]);
-        yield db.run("COMMIT");
+const processDebitCreditTransaction = (username_1, amount_1, transactionType_1, ...args_1) => __awaiter(void 0, [username_1, amount_1, transactionType_1, ...args_1], void 0, function* (username, amount, transactionType, retries = 3) {
+    let retryCount = 0;
+    while (retryCount < retries) {
+        try {
+            yield db.run("BEGIN TRANSACTION");
+            yield (0, exports.updateBalance)(username, amount);
+            yield db.run("INSERT INTO transactions_debit_credit (username, amount, transaction_type) VALUES (?, ?, ?)", [username, amount, transactionType]);
+            yield db.run("COMMIT");
+            return;
+        }
+        catch (error) {
+            yield db.run("ROLLBACK");
+            if (error.message.includes('SQLITE_BUSY')) {
+                retryCount++;
+                continue;
+            }
+            else {
+                throw error;
+            }
+        }
     }
-    catch (error) {
-        yield db.run("ROLLBACK");
-        console.error('Error processing debit/credit transaction:', error);
-        throw error;
-    }
+    throw new Error(`Failed to process debit/credit transaction after ${retries} retries.`);
 });
 exports.processDebitCreditTransaction = processDebitCreditTransaction;
-const transferFunds = (sender, receiver, amount) => __awaiter(void 0, void 0, void 0, function* () {
-    try {
-        yield db.run("BEGIN IMMEDIATE");
-        const senderBalance = yield (0, exports.getBalance)(sender);
-        if (senderBalance < amount) {
-            throw new Error('Insufficient balance');
+const transferFunds = (sender_1, receiver_1, amount_2, ...args_2) => __awaiter(void 0, [sender_1, receiver_1, amount_2, ...args_2], void 0, function* (sender, receiver, amount, retries = 3) {
+    let retryCount = 0;
+    while (retryCount < retries) {
+        try {
+            yield db.run("BEGIN IMMEDIATE");
+            const senderBalance = yield (0, exports.getBalance)(sender);
+            if (senderBalance < amount) {
+                throw new Error('Insufficient balance');
+            }
+            yield (0, exports.updateBalance)(sender, -amount);
+            yield (0, exports.updateBalance)(receiver, amount);
+            db.run("INSERT INTO transactions_transfer (sender, receiver, amount) VALUES (?, ?, ?)", [sender, receiver, amount]);
+            yield db.run("COMMIT");
+            return;
         }
-        yield (0, exports.updateBalance)(sender, -amount);
-        yield (0, exports.updateBalance)(receiver, amount);
-        db.run("INSERT INTO transactions_transfer (sender, receiver, amount) VALUES (?, ?, ?)", [sender, receiver, amount]);
-        console.log(`Transaction recorded: ${sender} transferred ${amount} to ${receiver}`);
-        yield db.run("COMMIT");
+        catch (error) {
+            yield db.run("ROLLBACK");
+            if (error.message.includes('SQLITE_BUSY')) {
+                retryCount++;
+                continue;
+            }
+            else {
+                throw error;
+            }
+        }
     }
-    catch (error) {
-        yield db.run("ROLLBACK");
-        console.error('Error transferring funds:', error);
-        throw error;
-    }
+    throw new Error(`Failed to transfer funds after ${retries} retries.`);
 });
 exports.transferFunds = transferFunds;
 exports.default = db;
