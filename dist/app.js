@@ -8,7 +8,7 @@ const express_session_1 = __importDefault(require("express-session"));
 const body_parser_1 = __importDefault(require("body-parser"));
 const walletController_1 = require("./walletController");
 const app = (0, express_1.default)();
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 app.use(body_parser_1.default.json());
 app.use((0, express_session_1.default)({
     secret: 'your-secret-key',
