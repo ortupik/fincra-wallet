@@ -12,7 +12,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.transferFunds = exports.updateBalance = exports.getBalance = exports.getUser = void 0;
+exports.transferFunds = exports.processDebitCreditTransaction = exports.updateBalance = exports.getBalance = exports.getUser = void 0;
 const sqlite3_1 = __importDefault(require("sqlite3"));
 const auth_1 = require("./auth");
 const db = new sqlite3_1.default.Database(':memory:', (err) => __awaiter(void 0, void 0, void 0, function* () {
@@ -41,6 +41,8 @@ const db = new sqlite3_1.default.Database(':memory:', (err) => __awaiter(void 0,
                 db.run("INSERT OR IGNORE INTO wallets (username, balance, pin) VALUES (?, ?, ?)", ['user2', 0, '1234']);
             }
         }));
+        db.run("CREATE TABLE IF NOT EXISTS transactions_debit_credit (id INTEGER PRIMARY KEY, username TEXT, amount INTEGER, transaction_type TEXT, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)");
+        db.run("CREATE TABLE IF NOT EXISTS transactions_transfer (id INTEGER PRIMARY KEY, sender TEXT, receiver TEXT, amount INTEGER, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)");
     }
 }));
 const getUser = (username) => {
@@ -94,6 +96,20 @@ const updateBalance = (username, amount) => {
     });
 };
 exports.updateBalance = updateBalance;
+const processDebitCreditTransaction = (username, amount, transactionType) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        yield db.run("BEGIN TRANSACTION");
+        yield (0, exports.updateBalance)(username, amount);
+        yield db.run("INSERT INTO transactions_debit_credit (username, amount, transaction_type) VALUES (?, ?, ?)", [username, amount, transactionType]);
+        yield db.run("COMMIT");
+    }
+    catch (error) {
+        yield db.run("ROLLBACK");
+        console.error('Error processing debit/credit transaction:', error);
+        throw error;
+    }
+});
+exports.processDebitCreditTransaction = processDebitCreditTransaction;
 const transferFunds = (sender, receiver, amount) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         yield db.run("BEGIN IMMEDIATE");
@@ -103,6 +119,7 @@ const transferFunds = (sender, receiver, amount) => __awaiter(void 0, void 0, vo
         }
         yield (0, exports.updateBalance)(sender, -amount);
         yield (0, exports.updateBalance)(receiver, amount);
+        db.run("INSERT INTO transactions_transfer (sender, receiver, amount) VALUES (?, ?, ?)", [sender, receiver, amount]);
         console.log(`Transaction recorded: ${sender} transferred ${amount} to ${receiver}`);
         yield db.run("COMMIT");
     }

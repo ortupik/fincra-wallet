@@ -26,9 +26,12 @@ const db = new sqlite3.Database(':memory:', async (err: Error | null) => {
             }
       });
 
-      }
-    });
-    
+      db.run("CREATE TABLE IF NOT EXISTS transactions_debit_credit (id INTEGER PRIMARY KEY, username TEXT, amount INTEGER, transaction_type TEXT, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)");
+      db.run("CREATE TABLE IF NOT EXISTS transactions_transfer (id INTEGER PRIMARY KEY, sender TEXT, receiver TEXT, amount INTEGER, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)");
+
+    }
+});
+
 export const getUser = (username: string): Promise<{ username: string, password: string, pin: string } | null> => {
     return new Promise((resolve, reject) => {
         db.get("SELECT * FROM users WHERE username = ?", [username], (err: Error | null, row: any) => {
@@ -56,25 +59,46 @@ export const getBalance = (username: string): Promise<number> => {
 };
 
 export const updateBalance = (username: string, amount: number): Promise<void> => {
-  return new Promise((resolve, reject) => {
-      try {
-          if (!username || typeof amount !== 'number' || isNaN(amount)) {
-              throw new Error('Invalid username or amount');
-          }
+    return new Promise((resolve, reject) => {
+        try {
+            if (!username || typeof amount !== 'number' || isNaN(amount)) {
+                throw new Error('Invalid username or amount');
+            }
 
-          db.run("UPDATE wallets SET balance = balance + ? WHERE username = ?", [amount, username], (updateErr: Error | null) => {
-              if (updateErr) {
-                  console.error('Error updating balance:', updateErr);
-                  reject(updateErr);
-              } else {
-                  resolve();
-              }
-          });
-      } catch (error) {
-          console.error('Error updating balance:', error);
-          reject(error);
-      }
-  });
+            db.run("UPDATE wallets SET balance = balance + ? WHERE username = ?", [amount, username], (updateErr: Error | null) => {
+                if (updateErr) {
+                    console.error('Error updating balance:', updateErr);
+                    reject(updateErr);
+                } else {
+                    resolve();
+                }
+            });
+
+        } catch (error) {
+            console.error('Error updating balance:', error);
+            reject(error);
+        }
+    });
+};
+
+export const processDebitCreditTransaction = async (
+    username: string,
+    amount: number,
+    transactionType: string
+): Promise<void> => {
+    try {
+        await db.run("BEGIN TRANSACTION");
+
+        await updateBalance(username, amount);
+
+        await db.run("INSERT INTO transactions_debit_credit (username, amount, transaction_type) VALUES (?, ?, ?)", [username, amount, transactionType]);
+
+        await db.run("COMMIT");
+    } catch (error) {
+        await db.run("ROLLBACK");
+        console.error('Error processing debit/credit transaction:', error);
+        throw error;
+    }
 };
 
 export const transferFunds = async (
@@ -92,9 +116,11 @@ export const transferFunds = async (
         
         await updateBalance(sender, -amount); 
         await updateBalance(receiver, amount); 
-        
+          
+        db.run("INSERT INTO transactions_transfer (sender, receiver, amount) VALUES (?, ?, ?)", [sender, receiver, amount]);
+       
         console.log(`Transaction recorded: ${sender} transferred ${amount} to ${receiver}`);
-        
+
         await db.run("COMMIT"); 
     } catch (error) {
         await db.run("ROLLBACK"); 

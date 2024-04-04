@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { getBalance, updateBalance, transferFunds, getUser} from './database';
+import { getBalance, processDebitCreditTransaction, transferFunds, getUser} from './database';
 import { authenticateUser, comparePassword } from './auth';
 
 export const walletRouter = require('express').Router();
@@ -141,7 +141,7 @@ const  getUserPin = async (username: string): Promise<string> => {
 
 const performCreditTransaction = async (user: string, amount: number, res: Response) => {
     try {
-        await updateBalance(user, amount);
+        await processDebitCreditTransaction(user, amount, 'credit');
         res.json({ message: `Wallet credited with ${amount}` });
     } catch (error) {
         console.error(error);
@@ -151,7 +151,7 @@ const performCreditTransaction = async (user: string, amount: number, res: Respo
 
 const performDebitTransaction = async (user: string, amount: number, res: Response) => {
     try {
-        await updateBalance(user, -amount);
+        await processDebitCreditTransaction(user, -amount, 'debit');
         res.json({ message: `Wallet debited with ${amount}` });
     } catch (error) {
         console.error(error);

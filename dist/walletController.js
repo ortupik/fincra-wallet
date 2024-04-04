@@ -149,7 +149,7 @@ const getUserPin = (username) => __awaiter(void 0, void 0, void 0, function* () 
 });
 const performCreditTransaction = (user, amount, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
-        yield (0, database_1.updateBalance)(user, amount);
+        yield (0, database_1.processDebitCreditTransaction)(user, amount, 'credit');
         res.json({ message: `Wallet credited with ${amount}` });
     }
     catch (error) {
@@ -159,7 +159,7 @@ const performCreditTransaction = (user, amount, res) => __awaiter(void 0, void 0
 });
 const performDebitTransaction = (user, amount, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
-        yield (0, database_1.updateBalance)(user, -amount);
+        yield (0, database_1.processDebitCreditTransaction)(user, -amount, 'debit');
         res.json({ message: `Wallet debited with ${amount}` });
     }
     catch (error) {
