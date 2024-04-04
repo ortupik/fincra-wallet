@@ -174,7 +174,7 @@ const performTransferTransaction = (sender, receiver, amount, res) => __awaiter(
             res.status(400).json({ error: 'Insufficient balance' });
             return;
         }
-        yield (0, database_1.updateBalancesAndRecordTransaction)(sender, receiver, amount);
+        yield (0, database_1.transferFunds)(sender, receiver, amount);
         res.json({ message: `Funds transferred successfully to ${receiver}` });
     }
     catch (error) {

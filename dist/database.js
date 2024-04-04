@@ -12,7 +12,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.updateBalancesAndRecordTransaction = exports.updateBalance = exports.getBalance = exports.getUser = void 0;
+exports.transferFunds = exports.updateBalance = exports.getBalance = exports.getUser = void 0;
 const sqlite3_1 = __importDefault(require("sqlite3"));
 const auth_1 = require("./auth");
 const db = new sqlite3_1.default.Database(':memory:', (err) => __awaiter(void 0, void 0, void 0, function* () {
@@ -20,7 +20,6 @@ const db = new sqlite3_1.default.Database(':memory:', (err) => __awaiter(void 0,
         console.error('Error opening database:', err);
     }
     else {
-        console.log('Database opened successfully');
         db.run("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, username TEXT UNIQUE, password TEXT, pin TEXT)", (err) => __awaiter(void 0, void 0, void 0, function* () {
             if (err) {
                 console.error('Error creating users table:', err);
@@ -74,90 +73,44 @@ const getBalance = (username) => {
 exports.getBalance = getBalance;
 const updateBalance = (username, amount) => {
     return new Promise((resolve, reject) => {
-        db.run("BEGIN TRANSACTION", (beginErr) => __awaiter(void 0, void 0, void 0, function* () {
-            if (beginErr) {
-                console.error('Error beginning transaction:', beginErr);
-                reject(beginErr);
-                return;
+        try {
+            if (!username || typeof amount !== 'number' || isNaN(amount)) {
+                throw new Error('Invalid username or amount');
             }
-            try {
-                if (!username || typeof amount !== 'number' || isNaN(amount)) {
-                    throw new Error('Invalid username or amount');
+            db.run("UPDATE wallets SET balance = balance + ? WHERE username = ?", [amount, username], (updateErr) => {
+                if (updateErr) {
+                    console.error('Error updating balance:', updateErr);
+                    reject(updateErr);
                 }
-                yield db.run("UPDATE wallets SET balance = balance + ? WHERE username = ?", [amount, username]);
-                yield db.run("COMMIT", (commitErr) => {
-                    if (commitErr) {
-                        console.error('Error committing transaction:', commitErr);
-                        reject(commitErr);
-                    }
-                    else {
-                        resolve();
-                    }
-                });
-            }
-            catch (error) {
-                yield db.run("ROLLBACK");
-                console.error('Error updating balance:', error);
-                reject(error);
-            }
-        }));
+                else {
+                    resolve();
+                }
+            });
+        }
+        catch (error) {
+            console.error('Error updating balance:', error);
+            reject(error);
+        }
     });
 };
 exports.updateBalance = updateBalance;
-const updateBalancesAndRecordTransaction = (sender, receiver, amount) => {
-    return new Promise((resolve, reject) => {
-        db.serialize(() => {
-            db.run("BEGIN TRANSACTION", (beginErr) => {
-                if (beginErr) {
-                    console.error('Error beginning transaction:', beginErr);
-                    reject(beginErr);
-                }
-                else {
-                    db.get("SELECT balance FROM wallets WHERE username = ?", [sender], (balanceErr, senderRow) => {
-                        if (balanceErr) {
-                            console.error('Error getting sender balance:', balanceErr);
-                            reject(balanceErr);
-                        }
-                        else {
-                            const senderBalance = senderRow ? senderRow.balance : 0;
-                            if (senderBalance < amount) {
-                                console.error('Insufficient balance');
-                                reject(new Error('Insufficient balance'));
-                            }
-                            else {
-                                db.run("UPDATE wallets SET balance = balance - ? WHERE username = ?", [amount, sender], (senderUpdateErr) => {
-                                    if (senderUpdateErr) {
-                                        console.error('Error updating sender balance:', senderUpdateErr);
-                                        reject(senderUpdateErr);
-                                    }
-                                    else {
-                                        db.run("UPDATE wallets SET balance = balance + ? WHERE username = ?", [amount, receiver], (receiverUpdateErr) => {
-                                            if (receiverUpdateErr) {
-                                                console.error('Error updating receiver balance:', receiverUpdateErr);
-                                                reject(receiverUpdateErr);
-                                            }
-                                            else {
-                                                console.log(`Transaction recorded: ${sender} transferred ${amount} to ${receiver}`);
-                                                db.run("COMMIT", (commitErr) => {
-                                                    if (commitErr) {
-                                                        console.error('Error committing transaction:', commitErr);
-                                                        reject(commitErr);
-                                                    }
-                                                    else {
-                                                        resolve();
-                                                    }
-                                                });
-                                            }
-                                        });
-                                    }
-                                });
-                            }
-                        }
-                    });
-                }
-            });
-        });
-    });
-};
-exports.updateBalancesAndRecordTransaction = updateBalancesAndRecordTransaction;
+const transferFunds = (sender, receiver, amount) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        yield db.run("BEGIN IMMEDIATE");
+        const senderBalance = yield (0, exports.getBalance)(sender);
+        if (senderBalance < amount) {
+            throw new Error('Insufficient balance');
+        }
+        yield (0, exports.updateBalance)(sender, -amount);
+        yield (0, exports.updateBalance)(receiver, amount);
+        console.log(`Transaction recorded: ${sender} transferred ${amount} to ${receiver}`);
+        yield db.run("COMMIT");
+    }
+    catch (error) {
+        yield db.run("ROLLBACK");
+        console.error('Error transferring funds:', error);
+        throw error;
+    }
+});
+exports.transferFunds = transferFunds;
 exports.default = db;

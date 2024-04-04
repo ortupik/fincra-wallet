@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { getBalance, updateBalance, updateBalancesAndRecordTransaction, getUser} from './database';
+import { getBalance, updateBalance, transferFunds, getUser} from './database';
 import { authenticateUser, comparePassword } from './auth';
 
 export const walletRouter = require('express').Router();
@@ -166,7 +166,7 @@ const performTransferTransaction = async (sender: string, receiver: string, amou
             res.status(400).json({ error: 'Insufficient balance' });
             return;
         }
-        await updateBalancesAndRecordTransaction(sender, receiver, amount);
+        await transferFunds(sender, receiver, amount);
         res.json({ message: `Funds transferred successfully to ${receiver}` });
     } catch (error) {
         console.error(error);

@@ -5,8 +5,6 @@ const db = new sqlite3.Database(':memory:', async (err: Error | null) => {
     if (err) {
         console.error('Error opening database:', err);
     } else {
-        console.log('Database opened successfully');
-
         db.run("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, username TEXT UNIQUE, password TEXT, pin TEXT)", async (err: Error | null) => {
           if (err) {
             console.error('Error creating users table:', err);
@@ -59,90 +57,50 @@ export const getBalance = (username: string): Promise<number> => {
 
 export const updateBalance = (username: string, amount: number): Promise<void> => {
   return new Promise((resolve, reject) => {
-      db.run("BEGIN TRANSACTION", async (beginErr: Error | null) => {
-          if (beginErr) {
-              console.error('Error beginning transaction:', beginErr);
-              reject(beginErr);
-              return;
+      try {
+          if (!username || typeof amount !== 'number' || isNaN(amount)) {
+              throw new Error('Invalid username or amount');
           }
 
-          try {
-              if (!username || typeof amount !== 'number' || isNaN(amount)) {
-                  throw new Error('Invalid username or amount');
+          db.run("UPDATE wallets SET balance = balance + ? WHERE username = ?", [amount, username], (updateErr: Error | null) => {
+              if (updateErr) {
+                  console.error('Error updating balance:', updateErr);
+                  reject(updateErr);
+              } else {
+                  resolve();
               }
-
-              await db.run("UPDATE wallets SET balance = balance + ? WHERE username = ?", [amount, username]);
-
-              await db.run("COMMIT", (commitErr: Error | null) => {
-                  if (commitErr) {
-                      console.error('Error committing transaction:', commitErr);
-                      reject(commitErr);
-                  } else {
-                      resolve();
-                  }
-              });
-          } catch (error) {
-              await db.run("ROLLBACK");
-              console.error('Error updating balance:', error);
-              reject(error);
-          }
-      });
+          });
+      } catch (error) {
+          console.error('Error updating balance:', error);
+          reject(error);
+      }
   });
 };
 
-
-export const updateBalancesAndRecordTransaction = (
+export const transferFunds = async (
     sender: string,
     receiver: string,
     amount: number
 ): Promise<void> => {
-    return new Promise((resolve, reject) => {
-        db.serialize(() => {
-            db.run("BEGIN TRANSACTION", (beginErr: Error | null) => {
-                if (beginErr) {
-                    console.error('Error beginning transaction:', beginErr);
-                    reject(beginErr);
-                } else {
-                    db.get("SELECT balance FROM wallets WHERE username = ?", [sender], (balanceErr: Error | null, senderRow: any) => {
-                        if (balanceErr) {
-                            console.error('Error getting sender balance:', balanceErr);
-                            reject(balanceErr);
-                        } else {
-                            const senderBalance = senderRow ? senderRow.balance : 0;
-                            if (senderBalance < amount) {
-                                console.error('Insufficient balance');
-                                reject(new Error('Insufficient balance'));
-                            } else {
-                                db.run("UPDATE wallets SET balance = balance - ? WHERE username = ?", [amount, sender], (senderUpdateErr: Error | null) => {
-                                    if (senderUpdateErr) {
-                                        console.error('Error updating sender balance:', senderUpdateErr);
-                                        reject(senderUpdateErr);
-                                    } else {
-                                        db.run("UPDATE wallets SET balance = balance + ? WHERE username = ?", [amount, receiver], (receiverUpdateErr: Error | null) => {
-                                            if (receiverUpdateErr) {
-                                                console.error('Error updating receiver balance:', receiverUpdateErr);
-                                                reject(receiverUpdateErr);
-                                            } else {
-                                                console.log(`Transaction recorded: ${sender} transferred ${amount} to ${receiver}`);
-                                                db.run("COMMIT", (commitErr: Error | null) => {
-                                                    if (commitErr) {
-                                                        console.error('Error committing transaction:', commitErr);
-                                                        reject(commitErr);
-                                                    } else {
-                                                        resolve();
-                                                    }
-                                                });
-                                            }
-                                        });
-                                    }
-                                });
-                            }
-                        }
-                    });
-                }
-            });
-        });
-    });
+    try {
+        await db.run("BEGIN IMMEDIATE");
+        const senderBalance = await getBalance(sender);
+        
+        if (senderBalance < amount) {
+            throw new Error('Insufficient balance');
+        }
+        
+        await updateBalance(sender, -amount); 
+        await updateBalance(receiver, amount); 
+        
+        console.log(`Transaction recorded: ${sender} transferred ${amount} to ${receiver}`);
+        
+        await db.run("COMMIT"); 
+    } catch (error) {
+        await db.run("ROLLBACK"); 
+        console.error('Error transferring funds:', error);
+        throw error;
+    }
 };
 
 export default db;
