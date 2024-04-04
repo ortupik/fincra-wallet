@@ -1,6 +1,3 @@
-Sure, here's the full README for your FinCra Wallet application:
-
----
 
 # FinCra Wallet
 
@@ -116,5 +113,3 @@ Contributions are welcome! Please feel free to submit a pull request or open an 
 This project is licensed under the [MIT License](LICENSE).
 
 --- 
-
-Feel free to customize the README further to fit your project's specific needs or requirements. Let me know if you need any further assistance!
